@@ -90,26 +90,36 @@ impl super::SoftwareBufferDisplay for DumbBufferDisplay {
 }
 
 impl crate::display::Presenter for DumbBufferDisplay {
-    fn present(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.drm_output.wait_for_page_flip();
+    fn register_page_flip_handler(
+        &self,
+        event_loop_handle: crate::calloop_backend::EventLoopHandle,
+    ) -> Result<(), PlatformError> {
+        self.drm_output.register_page_flip_handler(event_loop_handle)
+    }
 
-        self.back_buffer.swap(&self.front_buffer);
-        self.front_buffer.swap(&self.in_flight_buffer);
-
-        self.in_flight_buffer.borrow_mut().age = 1;
-        for buffer in [&self.back_buffer, &self.front_buffer] {
-            let mut buffer_borrow = buffer.borrow_mut();
-            if buffer_borrow.age != 0 {
-                buffer_borrow.age += 1;
+    fn present(
+        &self,
+        ready_for_next_animation_frame: Box<dyn FnOnce()>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // TODO: dirty framebuffer
+        self.front_buffer.swap(&self.back_buffer);
+        self.front_buffer.borrow_mut().age = 1;
+        {
+            let mut back_buffer = self.back_buffer.borrow_mut();
+            if back_buffer.age != 0 {
+                back_buffer.age += 1;
             }
         }
-
-        // TODO: dirty framebuffer
         self.drm_output.present(
-            self.in_flight_buffer.borrow().buffer_handle,
-            self.in_flight_buffer.borrow().fb_handle,
+            self.front_buffer.borrow().buffer_handle,
+            self.front_buffer.borrow().fb_handle,
+            ready_for_next_animation_frame,
         )?;
         Ok(())
+    }
+
+    fn is_ready_to_present(&self) -> bool {
+        self.drm_output.is_ready_to_present()
     }
 }
 
