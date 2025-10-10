@@ -128,9 +128,6 @@ unsafe impl i_slint_renderer_femtovg::opengl::OpenGLInterface for GlContextWrapp
     }
 
     fn swap_buffers(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Make sure the in-flight font-buffer from the previous swap_buffers call has been
-        // posted to the screen.
-        self.gbm_display.drm_output.wait_for_page_flip();
         self.glutin_surface.swap_buffers(&self.glutin_context).map_err(
             |glutin_error| -> PlatformError {
                 format!("FemtoVG: Error swapping buffers: {glutin_error}").into()
@@ -178,10 +175,15 @@ impl crate::fullscreenwindowadapter::FullscreenRenderer for FemtoVGRendererAdapt
         &self.renderer
     }
 
+    fn is_ready_to_present(&self) -> bool {
+        self.gbm_display.is_ready_to_present()
+    }
+
     fn render_and_present(
         &self,
         rotation: RenderingRotation,
         draw_mouse_cursor_callback: &dyn Fn(&mut dyn ItemRenderer),
+        ready_for_next_animation_frame: Box<dyn FnOnce()>,
     ) -> Result<(), PlatformError> {
         let size = self.size();
         self.renderer.render_transformed_with_post_callback(
@@ -192,11 +194,18 @@ impl crate::fullscreenwindowadapter::FullscreenRenderer for FemtoVGRendererAdapt
                 draw_mouse_cursor_callback(item_renderer);
             }),
         )?;
-        self.gbm_display.present()?;
+        self.gbm_display.present(ready_for_next_animation_frame)?;
         Ok(())
     }
     fn size(&self) -> i_slint_core::api::PhysicalSize {
         let (width, height) = self.gbm_display.drm_output.size();
         i_slint_core::api::PhysicalSize::new(width, height)
+    }
+
+    fn register_page_flip_handler(
+        &self,
+        event_loop_handle: crate::calloop_backend::EventLoopHandle,
+    ) -> Result<(), PlatformError> {
+        self.gbm_display.clone().register_page_flip_handler(event_loop_handle)
     }
 }

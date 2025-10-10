@@ -51,7 +51,7 @@ impl GbmDisplay {
         let mut config_template_builder = glutin::config::ConfigTemplateBuilder::new();
 
         // Some drivers (like mali) report BAD_MATCH when trying to create a window surface for an xrgb backed
-        // gbm surface with an EGL config that has an alpha size of 8. Disable alpha explicitly to accommodate.
+        // gbm surface with an EGL config that has an alpha size of 8. Disable alpha explicitly to accomodate.
         if matches!(self.surface_format, drm::buffer::DrmFourcc::Xrgb8888) {
             config_template_builder =
                 config_template_builder.with_transparency(false).with_alpha_size(0);
@@ -72,7 +72,17 @@ impl GbmDisplay {
 }
 
 impl super::Presenter for GbmDisplay {
-    fn present(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn register_page_flip_handler(
+        &self,
+        event_loop_handle: crate::calloop_backend::EventLoopHandle,
+    ) -> Result<(), PlatformError> {
+        self.drm_output.register_page_flip_handler(event_loop_handle)
+    }
+
+    fn present(
+        &self,
+        ready_for_next_animation_frame: Box<dyn FnOnce()>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut front_buffer = unsafe {
             self.gbm_surface
                 .lock_front_buffer()
@@ -100,7 +110,11 @@ impl super::Presenter for GbmDisplay {
             device: self.drm_output.drm_device.clone(),
         });
 
-        self.drm_output.present(front_buffer, fb)
+        self.drm_output.present(front_buffer, fb, ready_for_next_animation_frame)
+    }
+
+    fn is_ready_to_present(&self) -> bool {
+        self.drm_output.is_ready_to_present()
     }
 }
 

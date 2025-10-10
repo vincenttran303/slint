@@ -121,7 +121,7 @@ impl Backend {
                     unimplemented!("Seat deactivation is not implemented");
                 }
             })
-            .map_err(|e| format!("Error opening session with libseat: {e}"))?
+                .map_err(|e| format!("Error opening session with libseat: {e}"))?
         };
 
         #[cfg(feature = "libseat")]
@@ -297,3 +297,5 @@ impl i_slint_core::platform::Platform for Backend {
 
 #[derive(Default)]
 pub struct LoopData {}
+
+pub type EventLoopHandle<'a> = calloop::LoopHandle<'a, LoopData>;
